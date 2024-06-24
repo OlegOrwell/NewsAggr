@@ -1,15 +1,9 @@
-import feedparser
-import configparser
-import logging
-
-from lemma import Lemma 
-
 import sqlite3
+import feedparser
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Table, Column, Integer, String, ForeignKey, update, and_
-
 
 Base = declarative_base()
 
@@ -18,26 +12,48 @@ class News(Base):
     Класс описыавющий новости.
     Так же взаимодействует с Базой
     """
+    """
+    Описание таблицы для sqlite3
+    """
     __tablename__ = "news"
     id  = Column(Integer, primary_key=True)
     title = Column(String) 
     link = Column(String)
+    # summary не работает на нескольких ресурсах,
+    #TODO надо исправить
+    #summary = Column(String)
+
     published = Column(Integer)
 
+    
     def __init__(self, title, link, published):
         self.title = title
         self.link = link
         self.published = published
+        #self.summary = summary
         
+    """
+    Текстовое представление класса 
+    """
     def __repr__(self):
         return f"News:{self.title}, Link:{self.link}, Pub:{self.published}"
 
+    """
+    Ключи для сравнения записей
+    """
     def _keys(self):
-        return (self.text, self.link)
+        return (self.title, self.link)
 
+    """
+    Сравнение происходит по ключам, то есть по заголовку
+    и линку 
+    """
     def __eq__(self, other):
         return self._keys() == other._keys()
 
+    """
+    ключи хешируются
+    """
     def __hash__(self):
         return hash(self._keys())
 
@@ -66,47 +82,11 @@ class Source(object):
     def refresh(self):
         self.news = []
         for i in self.links:
-            try:
-                data = feedparser.parse(i)
-            except(e):
-                print("Parsing Error" + e)
-            self.news += [News(i.title, i.link, i.published) \
+            feedparser.USER_AGENT = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0i'
+            data = feedparser.parse(i)
+            if data.status == 200:
+                print("All right")
+                self.news += [News(i.title,i.link,i.published)\
                     for i in data['entries']]
-
-class Bot:
-    """
-    Основной класс программмы
-    """
-    def __init__(self):
-        config = configparser.ConfigParser()
-        config.read('./config')
-        log_file = config['Export_params']['log_file']
-        self.pub_pause = int(config['Export_params']['pub_pause'])
-        self.delay_between_messages = int\
-                (config['Export_params']['delay_between_messages'])
-        logging.basicConfig\
-                (filename=config['Export_params']['log_file'],\
-               encoding='utf-8', level=logging.INFO)
-        self.db = Database(config['Database']['Path'])
-        self.src = Source(config['RSS'])
-    
-    def detect(self):
-        self.src.refresh()
-        news = self.src.news
-        news.reverse()
-        
-        lemma = Lemma()
-        tmp = []
-        for n in news:
-            if not self.db.find_link(n.link):
-                logging.info( u'Detect news: %s' % n)
-                print(n.keys())
-                print(lemma.country_lemma(n.title))
-                #self.db.add_news(n)
-
-def main():
-    #sourse(["http://tass.ru/rss/v2.xml"])
-    #create_connection('news.db')
-    b = Bot()
-    b.detect()
-main()
+            else:
+                print(f'Some error - {data.status}')
